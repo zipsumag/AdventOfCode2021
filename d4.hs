@@ -1,7 +1,8 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-import Data.List (unfoldr)
+import qualified Data.List as L
+import qualified Data.Map  as M
 
 input = "92,12,94,64,14,4,99,71,47,59,37,73,29,7,16,32,40,53,30,76,74,39,70,88,55,45,17,0,24,65,35,20,63,68,89,84,33,66,18,50,38,10,83,75,67,42,3,56,82,34,90,46,87,52,49,2,21,62,93,86,25,78,19,57,77,26,81,15,23,31,54,48,98,11,91,85,60,72,8,69,6,22,97,96,80,95,58,36,44,1,51,43,9,61,41,79,5,27,28,13\n\
 \ \n\
@@ -605,16 +606,75 @@ input = "92,12,94,64,14,4,99,71,47,59,37,73,29,7,16,32,40,53,30,76,74,39,70,88,5
 \ 47 49 16 89  8\n\
 \  2 95 48 38 85"
 
+data BingoField = BingoField { value :: Int
+                             , marked :: Bool } deriving(Eq, Show)
+
+type BingoTable = M.Map (Int, Int) BingoField
+
 separateBy :: forall a. Eq a => a -> [a] -> [[a]]
-separateBy chr = unfoldr sep
+separateBy chr = L.unfoldr sep
   where sep :: [a] -> Maybe ([a], [a])
         sep [] = Nothing
         sep x  = Just . fmap (drop 1) . break (== chr) $ x
 
+chunksOf :: Int -> [a] -> [[a]]
+chunksOf _ [] = []
+chunksOf n xs = case splitAt n xs of
+                     (ys, []) -> [ys]
+                     (ys, zs) -> ys:(chunksOf n zs)
+
+toBingoTable :: [Int] -> BingoTable
+toBingoTable v = let coordValZip   = zip [(r, c) | r <- [0..4], c <- [0..4]] v
+                     coordFieldZip = map (\(c, v) -> (c, BingoField v False)) coordValZip
+                 in M.fromList coordFieldZip
+
+getRows :: BingoTable -> [[BingoField]]
+getRows m = [[ m M.! (r, c) | c <- [0..4]] | r <- [0..4]]
+
+getCols :: BingoTable -> [[BingoField]]
+getCols m = [[ m M.! (r, c) | r <- [0..4]] | c <- [0..4]]
+
+markAllFields :: BingoTable -> BingoTable
+markAllFields = M.map (\f -> f { marked = True })
+
+markField :: Int -> BingoTable -> BingoTable
+markField v table = M.union markedTab table
+  where matching  = M.filter ((==v) . value) table
+        markedTab = M.map (\f -> f { marked = True }) matching
+
+unmarkField :: Int -> BingoTable -> BingoTable
+unmarkField v table = M.union unmarkedTab table
+  where matching    = M.filter ((==v) . value) table
+        unmarkedTab = M.map (\f -> f { marked = False }) matching
+
+hasBingo :: BingoTable -> Bool
+hasBingo m = any (==True) . map (all (==True) . map marked) $ (getCols m ++ getRows m)
+
+getScore :: BingoTable -> Int -> Int
+getScore table lastNum = 
+  let unmarked = M.filter (not . marked) table
+      sum      = M.foldl (\sum f -> sum + value f) 0 unmarked
+  in sum * lastNum
+
+runBingoFirst :: [BingoTable] -> [Int] -> Int
+runBingoFirst tabs nums@(n:ns) =
+  case filter hasBingo updatedTabs of
+    winner:[] -> getScore winner n
+    otherwise -> runBingoFirst updatedTabs ns
+  where updatedTabs = map (markField n) tabs
+
+runBingoLast :: [BingoTable] -> [Int] -> Int
+runBingoLast tabs nums@(n:ns) =
+  case filter (not . hasBingo) updatedTabs of
+    winner:[] -> getScore (markField n winner) n
+    otherwise -> runBingoLast updatedTabs ns
+  where updatedTabs = map (unmarkField n) tabs
+
 main :: IO ()
 main = do
-  let (firstline, tables) = break (== '\n') input
-  let numbers = separateBy ',' firstline
-  print numbers
-  --l <- forM [1..n] (\_ -> (map (read :: String -> Int) . words) <$> getLine)
-  --putStrLn . unwords . map show . f $ l
+  let (drawn:rest) = lines input
+  let numbers      = map (read :: String -> Int) . separateBy ',' $ drawn
+  let tables       = chunksOf 25 . concat . map (map (read :: String -> Int) . words) $ rest
+  let bingoTables  = map toBingoTable tables
+  print (runBingoFirst bingoTables numbers)
+  print (runBingoLast (map markAllFields bingoTables) (reverse numbers))
