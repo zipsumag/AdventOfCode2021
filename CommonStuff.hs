@@ -35,3 +35,8 @@ strSplitAll sep s
     | null rest = w:[]
     | otherwise = w:(strSplitAll sep . drop (length sep) $ rest)
   where (w, rest) = break' (L.isPrefixOf sep) s
+
+getBetween :: Int -> Int -> [Int]
+getBetween a b
+  | b > a     = [a..b]
+  | otherwise = reverse [b..a]
