@@ -6,6 +6,7 @@ module CommonStuff ( separateBy
                    , strSplitAll
                    , break'
                    , getBetween
+                   , fromJust
                    ) where
 
 import qualified Data.List as L
@@ -40,3 +41,7 @@ getBetween :: Int -> Int -> [Int]
 getBetween a b
   | b > a     = [a..b]
   | otherwise = reverse [b..a]
+
+fromJust :: Maybe a -> a
+fromJust (Just x) = x
+fromJust Nothing  = error "fromJust is not defined for Nothing"
